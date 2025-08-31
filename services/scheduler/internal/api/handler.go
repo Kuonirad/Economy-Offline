@@ -82,8 +82,8 @@ func (h *Handler) GetJobStatus(w http.ResponseWriter, r *http.Request) {
         "updatedAt": job.UpdatedAt,
         "shards": map[string]interface{}{
             "total":     job.TotalShards,
-            "completed": 0, // TODO: Track completed shards
-            "failed":    0, // TODO: Track failed shards
+            "completed": job.CompletedShards,
+            "failed":    job.FailedShards,
         },
     }
     
@@ -100,12 +100,16 @@ func (h *Handler) CancelJob(w http.ResponseWriter, r *http.Request) {
         return
     }
     
-    // TODO: Implement job cancellation in scheduler
+    // Cancel the job
+    if err := h.scheduler.CancelJob(jobID); err != nil {
+        h.respondError(w, http.StatusBadRequest, err.Error())
+        return
+    }
     
     response := map[string]interface{}{
         "jobId":   jobID,
         "status":  "cancelled",
-        "message": "Job cancellation requested",
+        "message": "Job successfully cancelled",
     }
     
     h.respondJSON(w, http.StatusOK, response)
@@ -113,19 +117,33 @@ func (h *Handler) CancelJob(w http.ResponseWriter, r *http.Request) {
 
 // ListNodes handles node listing requests
 func (h *Handler) ListNodes(w http.ResponseWriter, r *http.Request) {
-    // TODO: Get actual nodes from scheduler
-    nodes := []map[string]interface{}{
-        {
-            "nodeId": "node-1",
-            "status": "active",
+    // Get nodes from scheduler's node manager
+    nodeManager := h.scheduler.GetNodeManager()
+    if nodeManager == nil {
+        h.respondError(w, http.StatusInternalServerError, "Node manager not available")
+        return
+    }
+    
+    availableNodes := nodeManager.GetAvailableNodes()
+    
+    nodes := make([]map[string]interface{}, 0, len(availableNodes))
+    for _, node := range availableNodes {
+        nodes = append(nodes, map[string]interface{}{
+            "nodeId": node.ID,
+            "status": string(node.Status),
             "capabilities": map[string]interface{}{
-                "hasGpu":   true,
-                "gpuModel": "NVIDIA RTX 3090",
-                "vram":     24576,
+                "hasGpu":   node.Capabilities.HasGPU,
+                "gpuModel": node.Capabilities.GPUModel,
+                "vram":     node.Capabilities.VRAM,
             },
-            "currentWorkload": 2,
-            "maxWorkload":     5,
-        },
+            "currentWorkload": node.CurrentWorkload,
+            "maxWorkload":     node.MaxWorkload,
+            "performance": map[string]interface{}{
+                "avgProcessingTime": node.Performance.AverageProcessingTime.Milliseconds(),
+                "successRate":       node.Performance.SuccessRate,
+                "reliabilityScore":  node.Performance.ReliabilityScore,
+            },
+        })
     }
     
     h.respondJSON(w, http.StatusOK, nodes)
