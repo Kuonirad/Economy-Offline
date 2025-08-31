@@ -70,6 +70,7 @@ type Job struct {
     Status           string
     Shards           []sharding.Shard
     DistributionPlan []DispatchInstruction
+    TotalShards      int
     CreatedAt        time.Time
     UpdatedAt        time.Time
 }
