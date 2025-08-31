@@ -1,0 +1,49 @@
+# WorldShare MVP - Economy Offline Architecture
+# Namespace Configuration for Optimizer and Trust Engine Separation
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: worldshare-economy-offline
+  labels:
+    app: worldshare
+    tier: mvp
+    environment: development
+    architecture: economy-offline
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: compute-quota
+  namespace: worldshare-economy-offline
+spec:
+  hard:
+    requests.cpu: "100"
+    requests.memory: 200Gi
+    requests.nvidia.com/gpu: "4"  # Limited GPU resources for M0
+    persistentvolumeclaims: "10"
+    services.loadbalancers: "2"
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: mem-limit-range
+  namespace: worldshare-economy-offline
+spec:
+  limits:
+  - max:
+      memory: 16Gi
+      cpu: "8"
+      nvidia.com/gpu: "2"
+    min:
+      memory: 256Mi
+      cpu: 100m
+    type: Container
+  - max:
+      memory: 32Gi
+      cpu: "16"
+      nvidia.com/gpu: "2"
+    min:
+      memory: 1Gi
+      cpu: 500m
+    type: Pod

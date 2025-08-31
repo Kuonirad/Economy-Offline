@@ -1,0 +1,143 @@
+# Economy Scheduler Service (Optimizer Component)
+# CORRECTED: No GPU allocation for scheduler - handles orchestration only
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: economy-scheduler
+  namespace: worldshare-economy-offline
+  labels:
+    app: worldshare
+    component: optimizer
+    service: scheduler
+spec:
+  replicas: 2  # HA configuration for M0
+  selector:
+    matchLabels:
+      app: worldshare
+      component: optimizer
+      service: scheduler
+  template:
+    metadata:
+      labels:
+        app: worldshare
+        component: optimizer
+        service: scheduler
+    spec:
+      containers:
+      - name: scheduler
+        image: worldshare/economy-scheduler:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+        - containerPort: 9090
+          name: metrics
+        env:
+        - name: SERVICE_NAME
+          value: "economy-scheduler"
+        - name: LOG_LEVEL
+          value: "debug"
+        - name: SHARDING_ENGINE_ENABLED
+          value: "true"
+        - name: VERIFICATION_POLICY
+          value: "statistical"
+        - name: REDUNDANCY_FACTOR
+          value: "2"  # N=2 for M0
+        - name: CANARY_AUDIT_RATE
+          value: "0.1"  # 10% canary auditing
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+            # CORRECTED: No GPU allocation
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        volumeMounts:
+        - name: config
+          mountPath: /etc/worldshare
+          readOnly: true
+      volumes:
+      - name: config
+        configMap:
+          name: scheduler-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: economy-scheduler
+  namespace: worldshare-economy-offline
+  labels:
+    app: worldshare
+    component: optimizer
+    service: scheduler
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  - port: 9090
+    targetPort: 9090
+    protocol: TCP
+    name: metrics
+  selector:
+    app: worldshare
+    component: optimizer
+    service: scheduler
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: scheduler-config
+  namespace: worldshare-economy-offline
+data:
+  scheduler.yaml: |
+    service:
+      name: economy-scheduler
+      version: "0.1.0-m0"
+    
+    sharding:
+      enabled: true
+      strategies:
+        - name: scene-based
+          maxShardSize: 1000  # Max vertices per shard
+          minShardSize: 100
+        - name: temporal
+          frameChunkSize: 30  # Frames per work unit
+    
+    distribution:
+      redundancy: 2  # Each shard processed by 2 nodes
+      canaryRate: 0.1  # 10% additional canary validation
+      nodeSelection:
+        strategy: "weighted-random"
+        factors:
+          - reliability: 0.4
+          - performance: 0.3
+          - cost: 0.3
+    
+    queue:
+      type: "priority"
+      maxQueueSize: 10000
+      processingThreads: 10
+    
+    database:
+      type: "postgresql"
+      host: "postgres-service.worldshare-economy-offline.svc.cluster.local"
+      port: 5432
+      database: "worldshare_scheduler"
+      sslMode: "require"

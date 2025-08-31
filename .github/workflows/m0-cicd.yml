@@ -1,0 +1,164 @@
+name: M0 Infrastructure CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, genspark_ai_developer]
+  pull_request:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: worldshare
+
+jobs:
+  # Build and test GPU base image
+  build-gpu-base:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+        
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Build and push GPU base image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./infrastructure/docker
+          file: ./infrastructure/docker/Dockerfile.gpu-base
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/gpu-base:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/gpu-base:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Build scheduler service
+  build-scheduler:
+    runs-on: ubuntu-latest
+    needs: [validate-contracts]
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+      
+      - name: Run scheduler tests
+        run: |
+          cd services/scheduler
+          go test -v -race -coverprofile=coverage.out ./...
+          go tool cover -html=coverage.out -o coverage.html
+      
+      - name: Build scheduler container
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ./infrastructure/docker/Dockerfile.scheduler
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/economy-scheduler:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/economy-scheduler:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Build verifier service
+  build-verifier:
+    runs-on: ubuntu-latest
+    needs: [build-gpu-base, validate-contracts]
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      
+      - name: Run verifier tests
+        run: |
+          cd services/verifier
+          pip install -r requirements-test.txt
+          pytest -v --cov=. --cov-report=html
+      
+      - name: Build verifier container
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ./infrastructure/docker/Dockerfile.verifier
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/trust-engine-verifier:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/trust-engine-verifier:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Validate API contracts
+  validate-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Validate OpenAPI specifications
+        run: |
+          npm install -g @apidevtools/swagger-cli
+          swagger-cli validate pkg/contracts/openapi/*.yaml
+
+  # Deploy to development environment
+  deploy-dev:
+    runs-on: ubuntu-latest
+    needs: [build-scheduler, build-verifier]
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Configure kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+      
+      - name: Deploy to Kubernetes
+        env:
+          KUBE_CONFIG: ${{ secrets.KUBE_CONFIG_DEV }}
+        run: |
+          echo "$KUBE_CONFIG" | base64 -d > /tmp/kubeconfig
+          export KUBECONFIG=/tmp/kubeconfig
+          
+          # Apply namespace and configs
+          kubectl apply -f infrastructure/kubernetes/namespace.yaml
+          
+          # Update image tags with current SHA
+          sed -i "s/:latest/:${{ github.sha }}/g" infrastructure/kubernetes/*.yaml
+          
+          # Deploy services
+          kubectl apply -f infrastructure/kubernetes/economy-scheduler.yaml
+          kubectl apply -f infrastructure/kubernetes/trust-engine-verifier.yaml
+          kubectl apply -f infrastructure/kubernetes/api-gateway.yaml
+          
+          # Wait for rollout
+          kubectl rollout status deployment/economy-scheduler -n worldshare-economy-offline
+          kubectl rollout status deployment/trust-engine-verifier -n worldshare-economy-offline
+
+  # Run M0.4 headless validation spike
+  headless-validation:
+    runs-on: [self-hosted, gpu]  # Requires GPU runner
+    needs: [build-gpu-base]
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Run headless validation suite
+        run: |
+          chmod +x tests/headless/validate-economy-offline-headless.sh
+          ./tests/headless/validate-economy-offline-headless.sh
+      
+      - name: Upload validation results
+        uses: actions/upload-artifact@v3
+        with:
+          name: headless-validation-results
+          path: tests/headless/results/
