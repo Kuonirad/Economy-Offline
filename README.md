@@ -229,10 +229,6 @@ This project is licensed under the **Apache License 2.0** - see the [LICENSE](./
 <div align="center">
 
 **⭐ Star this repo if GPU Optimizer helps your projects! ⭐**
-
-[![GitHub stars](https://img.shields.io/github/stars/your-org/gpu-optimizer?style=social)](https://github.com/your-org/gpu-optimizer/stargazers)
-[![Twitter Follow](https://img.shields.io/twitter/follow/gpu_optimizer?style=social)](https://twitter.com/gpu_optimizer)
-
 ---
 
 *Empowering the future of distributed rendering*
