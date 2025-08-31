@@ -1,0 +1,260 @@
+# M0.5 Dependency Resolution Configuration
+# External dependencies and version requirements
+
+version: "0.1.0-m0"
+
+runtime_dependencies:
+  # GPU/CUDA Requirements
+  cuda:
+    version: "11.8"
+    compute_capability: "7.0"
+    required: true
+    
+  nvidia_driver:
+    min_version: "520.61.05"
+    required: true
+    
+  # Container Runtime
+  docker:
+    min_version: "20.10.0"
+    nvidia_container_runtime: true
+    required: true
+    
+  kubernetes:
+    min_version: "1.25.0"
+    gpu_operator_required: true
+    
+  # Python Dependencies
+  python:
+    version: "3.9"
+    packages:
+      - torch: "2.0.1"
+      - torchvision: "0.15.2"
+      - numpy: "1.24.3"
+      - scipy: "1.10.1"
+      - scikit-image: "0.21.0"
+      - opencv-python-headless: "4.8.0.74"
+      - lpips: "0.1.4"
+      - kornia: "0.7.0"
+      - fastapi: "0.103.0"
+      - uvicorn: "0.23.2"
+      - pydantic: "2.3.0"
+      - redis: "4.6.0"
+      - prometheus-client: "0.17.1"
+      
+  # Go Dependencies
+  go:
+    version: "1.21"
+    modules:
+      - github.com/gorilla/mux: "v1.8.0"
+      - github.com/prometheus/client_golang: "v1.17.0"
+      - github.com/sirupsen/logrus: "v1.9.3"
+      - github.com/lib/pq: "v1.10.9"
+      - github.com/redis/go-redis/v9: "v9.3.0"
+      - google.golang.org/grpc: "v1.59.0"
+      
+  # Node.js Dependencies (for Unity plugin)
+  nodejs:
+    version: "18.x"
+    packages:
+      - axios: "^1.5.0"
+      - ws: "^8.14.0"
+      - express: "^4.18.0"
+
+# Rendering Engine Dependencies
+rendering_engines:
+  blender:
+    min_version: "3.6.0"
+    required_addons:
+      - cycles
+    python_version: "3.10"  # Blender's embedded Python
+    headless_support: true
+    
+  unity:
+    min_version: "2022.3.0f1"
+    render_pipelines:
+      - name: "HDRP"
+        version: "14.0.0"
+      - name: "URP"
+        version: "14.0.0"
+    headless_support: true
+    linux_server_build: true
+
+# External Services
+external_services:
+  postgresql:
+    version: "15.0"
+    extensions:
+      - uuid-ossp
+      - pg_stat_statements
+    connection_pool_size: 50
+    
+  redis:
+    version: "7.0"
+    modules:
+      - RedisJSON
+      - RedisTimeSeries
+    persistence: true
+    
+  minio:
+    version: "latest"
+    buckets:
+      - name: "scene-assets"
+        policy: "public-read"
+      - name: "optimized-results"
+        policy: "private"
+      - name: "verification-data"
+        policy: "private"
+
+# Asset Repository Requirements
+asset_repository:
+  storage_backend: "s3"
+  minimum_space_gb: 500
+  
+  supported_formats:
+    models:
+      - ".blend"
+      - ".fbx"
+      - ".obj"
+      - ".gltf"
+      - ".glb"
+      - ".usd"
+      - ".usda"
+      - ".usdc"
+      - ".usdz"
+    textures:
+      - ".png"
+      - ".jpg"
+      - ".jpeg"
+      - ".exr"
+      - ".hdr"
+      - ".tiff"
+      - ".dds"
+    
+  scene_cohort:
+    schema_version: "1.0.0"
+    minimum_scenes: 100
+    categories:
+      - indoor: 25
+      - outdoor: 25
+      - complex: 25
+      - hybrid: 25
+    
+    quality_requirements:
+      reference_renders: true
+      ground_truth_metrics: true
+      optimization_hints: false  # Optional for M0
+    
+    size_limits:
+      max_scene_size_gb: 10
+      max_texture_resolution: 8192
+      max_vertex_count: 10000000
+
+# Network Requirements
+network:
+  bandwidth_mbps: 1000
+  latency_ms: 50
+  packet_loss_percent: 0.1
+  
+  ports:
+    - service: "scheduler"
+      port: 8080
+      protocol: "tcp"
+    - service: "verifier"
+      port: 8081
+      protocol: "tcp"
+    - service: "metrics"
+      port: 9090
+      protocol: "tcp"
+    - service: "postgresql"
+      port: 5432
+      protocol: "tcp"
+    - service: "redis"
+      port: 6379
+      protocol: "tcp"
+
+# Hardware Requirements
+hardware:
+  minimum:
+    cpu_cores: 8
+    ram_gb: 32
+    gpu_vram_gb: 8
+    storage_gb: 500
+    
+  recommended:
+    cpu_cores: 16
+    ram_gb: 64
+    gpu_vram_gb: 24
+    storage_gb: 1000
+    gpu_model: "NVIDIA RTX 3090 or better"
+    
+  production:
+    cpu_cores: 32
+    ram_gb: 128
+    gpu_vram_gb: 48
+    storage_gb: 2000
+    gpu_model: "NVIDIA A100 or better"
+    gpu_count: 4
+
+# Monitoring & Observability
+monitoring:
+  prometheus:
+    version: "2.45.0"
+    retention_days: 30
+    scrape_interval: "15s"
+    
+  grafana:
+    version: "10.0.0"
+    dashboards:
+      - "GPU Utilization"
+      - "Job Processing"
+      - "Verification Metrics"
+      - "Cost Analysis"
+    
+  logging:
+    backend: "elasticsearch"
+    version: "8.9.0"
+    retention_days: 7
+    log_level: "info"
+
+# Security Requirements
+security:
+  tls:
+    min_version: "1.3"
+    required: true
+    
+  authentication:
+    method: "jwt"
+    token_expiry_hours: 24
+    
+  encryption:
+    data_at_rest: "AES-256-GCM"
+    data_in_transit: "TLS 1.3"
+    
+  compliance:
+    - "SOC2"
+    - "GDPR"
+    - "ISO27001"
+
+# Development Tools
+development:
+  required_tools:
+    - docker-compose: "2.20.0"
+    - kubectl: "1.28.0"
+    - helm: "3.12.0"
+    - make: "4.3"
+    - git: "2.40.0"
+    
+  testing_frameworks:
+    - pytest: "7.4.0"
+    - go-test: "builtin"
+    - jest: "29.6.0"
+    - unity-test-framework: "1.3.0"
+    
+  ci_cd:
+    platform: "GitHub Actions"
+    required_secrets:
+      - KUBE_CONFIG_DEV
+      - DOCKER_REGISTRY_TOKEN
+      - API_KEY_DEV
+      - GPU_RUNNER_TOKEN

@@ -1,0 +1,81 @@
+# GPU-enabled base container for Trust Engine components
+# CORRECTED: Using runtime image and removing container runtime installation
+
+FROM nvidia/cuda:11.8.0-runtime-ubuntu20.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV CUDA_HOME=/usr/local/cuda-11.8
+ENV LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
+ENV PATH=$CUDA_HOME/bin:$PATH
+
+# Install necessary libraries for headless rendering and GPU compute
+# CORRECTED: Removed nvidia-container-runtime installation
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # OpenGL/EGL for headless rendering
+    libgl1-mesa-glx \
+    libgl1-mesa-dri \
+    libegl1-mesa \
+    libgbm1 \
+    # Vulkan support
+    vulkan-utils \
+    libvulkan1 \
+    mesa-vulkan-drivers \
+    # X Virtual Framebuffer for headless operation
+    xvfb \
+    x11vnc \
+    x11-utils \
+    # Python and build tools
+    python3.9 \
+    python3.9-dev \
+    python3-pip \
+    build-essential \
+    cmake \
+    git \
+    wget \
+    curl \
+    # System utilities
+    htop \
+    nano \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set up Python environment
+RUN python3.9 -m pip install --upgrade pip setuptools wheel
+
+# Install PyTorch with CUDA support for verification metrics
+RUN pip3 install torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 --index-url https://download.pytorch.org/whl/cu118
+
+# Install ML/verification dependencies
+RUN pip3 install \
+    numpy==1.24.3 \
+    scipy==1.10.1 \
+    scikit-image==0.21.0 \
+    opencv-python-headless==4.8.0.74 \
+    Pillow==10.0.0 \
+    matplotlib==3.7.2 \
+    nvidia-ml-py3==7.352.0 \
+    pynvml==11.5.0 \
+    lpips==0.1.4 \
+    kornia==0.7.0
+
+# Create virtual display script for headless operation
+RUN echo '#!/bin/bash\n\
+export DISPLAY=:99\n\
+Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp -nolisten unix &\n\
+sleep 2\n\
+exec "$@"' > /usr/local/bin/xvfb-run-custom && \
+    chmod +x /usr/local/bin/xvfb-run-custom
+
+# Validate GPU access
+RUN python3 -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}'); print(f'CUDA version: {torch.version.cuda}')"
+
+# Set working directory
+WORKDIR /app
+
+# Health check for GPU availability
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD nvidia-smi && python3 -c "import torch; assert torch.cuda.is_available()" || exit 1
+
+# Default entrypoint with virtual display
+ENTRYPOINT ["/usr/local/bin/xvfb-run-custom"]
+CMD ["/bin/bash"]

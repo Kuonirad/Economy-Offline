@@ -1,0 +1,514 @@
+openapi: 3.0.3
+info:
+  title: WorldShare Economy Offline API
+  description: |
+    API specification for the WorldShare distributed GPU optimization platform.
+    Implements the Optimizer and Trust Engine separation for time-shifted processing.
+  version: 0.1.0-m0
+  contact:
+    name: WorldShare Team
+    email: api@worldshare.dev
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+
+servers:
+  - url: https://api.worldshare.dev/v1
+    description: Production environment
+  - url: https://staging-api.worldshare.dev/v1
+    description: Staging environment
+  - url: http://localhost:8080/api/v1
+    description: Local development
+
+tags:
+  - name: Jobs
+    description: Job submission and management
+  - name: Verification
+    description: Trust Engine verification operations
+  - name: Nodes
+    description: Compute node management
+  - name: Reports
+    description: Savings and performance reports
+
+paths:
+  /jobs:
+    post:
+      tags:
+        - Jobs
+      summary: Submit optimization job
+      description: Submit a new scene optimization job to the Economy Scheduler
+      operationId: submitJob
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobManifest'
+      responses:
+        '201':
+          description: Job successfully created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /jobs/{jobId}:
+    get:
+      tags:
+        - Jobs
+      summary: Get job status
+      description: Retrieve the current status and details of an optimization job
+      operationId: getJobStatus
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '200':
+          description: Job details retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobDetails'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /jobs/{jobId}/cancel:
+    post:
+      tags:
+        - Jobs
+      summary: Cancel job
+      description: Cancel an active optimization job
+      operationId: cancelJob
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '200':
+          description: Job cancelled successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /verification/submit:
+    post:
+      tags:
+        - Verification
+      summary: Submit work for verification
+      description: Submit completed work unit to Trust Engine for verification
+      operationId: submitVerification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkSubmission'
+      responses:
+        '202':
+          description: Verification request accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificationReceipt'
+
+  /nodes:
+    get:
+      tags:
+        - Nodes
+      summary: List compute nodes
+      description: Retrieve list of available compute nodes
+      operationId: listNodes
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, idle, offline]
+        - name: hasGpu
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Node list retrieved
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NodeInfo'
+
+components:
+  schemas:
+    JobManifest:
+      type: object
+      required:
+        - sceneId
+        - sceneType
+        - optimizationPath
+        - verificationPolicy
+      properties:
+        sceneId:
+          type: string
+          format: uuid
+          description: Unique identifier for the scene
+        sceneType:
+          type: string
+          enum: [indoor, outdoor, complex, hybrid]
+          description: Classification of scene type
+        optimizationPath:
+          type: string
+          enum: [baking, gaussian-splatting, hybrid]
+          description: Selected optimization pipeline
+        verificationPolicy:
+          $ref: '#/components/schemas/VerificationPolicy'
+        priority:
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 5
+          description: Job priority (1=lowest, 10=highest)
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Additional scene metadata
+        constraints:
+          $ref: '#/components/schemas/JobConstraints'
+
+    VerificationPolicy:
+      type: object
+      required:
+        - redundancyFactor
+        - qualityTarget
+      properties:
+        redundancyFactor:
+          type: integer
+          minimum: 1
+          maximum: 5
+          default: 2
+          description: Number of redundant processing nodes (N)
+        canaryRate:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 0.5
+          default: 0.1
+          description: Percentage of additional canary validations
+        qualityTarget:
+          $ref: '#/components/schemas/QualityMetrics'
+        consensusThreshold:
+          type: number
+          format: float
+          minimum: 0.5
+          maximum: 1.0
+          default: 0.66
+          description: Required agreement threshold for verification
+
+    QualityMetrics:
+      type: object
+      required:
+        - ssim
+        - psnr
+      properties:
+        ssim:
+          type: number
+          format: float
+          minimum: 0.9
+          maximum: 1.0
+          default: 0.98
+          description: Structural Similarity Index threshold
+        psnr:
+          type: number
+          format: float
+          minimum: 30.0
+          maximum: 50.0
+          default: 35.0
+          description: Peak Signal-to-Noise Ratio threshold (dB)
+        lpips:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 0.1
+          default: 0.05
+          description: Learned Perceptual Image Patch Similarity threshold
+
+    JobConstraints:
+      type: object
+      properties:
+        maxProcessingTime:
+          type: integer
+          description: Maximum processing time in seconds
+        maxCost:
+          type: number
+          format: float
+          description: Maximum cost in credits
+        targetFramerate:
+          type: integer
+          minimum: 30
+          maximum: 120
+          default: 90
+          description: Target framerate for optimized scene
+        resolution:
+          type: string
+          enum: [HD, FHD, 2K, 4K, 8K]
+          default: 4K
+          description: Target resolution
+
+    JobResponse:
+      type: object
+      required:
+        - jobId
+        - status
+        - createdAt
+      properties:
+        jobId:
+          type: string
+          format: uuid
+          description: Unique job identifier
+        status:
+          type: string
+          enum: [pending, queued, processing, verifying, completed, failed, cancelled]
+        createdAt:
+          type: string
+          format: date-time
+        estimatedCompletion:
+          type: string
+          format: date-time
+        estimatedCost:
+          type: number
+          format: float
+          description: Estimated cost in credits
+
+    JobDetails:
+      allOf:
+        - $ref: '#/components/schemas/JobResponse'
+        - type: object
+          properties:
+            manifest:
+              $ref: '#/components/schemas/JobManifest'
+            progress:
+              type: object
+              properties:
+                totalShards:
+                  type: integer
+                completedShards:
+                  type: integer
+                failedShards:
+                  type: integer
+                verifiedShards:
+                  type: integer
+            results:
+              type: object
+              properties:
+                optimizedAssetUrl:
+                  type: string
+                  format: uri
+                qualityReport:
+                  $ref: '#/components/schemas/QualityReport'
+                savingsReport:
+                  $ref: '#/components/schemas/SavingsReport'
+
+    WorkSubmission:
+      type: object
+      required:
+        - jobId
+        - shardId
+        - nodeId
+        - resultData
+      properties:
+        jobId:
+          type: string
+          format: uuid
+        shardId:
+          type: string
+          format: uuid
+        nodeId:
+          type: string
+          format: uuid
+        redundancyId:
+          type: integer
+          description: Which redundancy copy (1, 2, etc.)
+        isCanary:
+          type: boolean
+          default: false
+        resultData:
+          type: object
+          properties:
+            outputUrl:
+              type: string
+              format: uri
+            processingTime:
+              type: integer
+              description: Processing time in milliseconds
+            resourceUsage:
+              type: object
+              properties:
+                gpuTime:
+                  type: integer
+                memoryPeak:
+                  type: integer
+                  description: Peak memory usage in MB
+
+    VerificationReceipt:
+      type: object
+      properties:
+        verificationId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+        submittedAt:
+          type: string
+          format: date-time
+
+    QualityReport:
+      type: object
+      properties:
+        ssim:
+          type: number
+          format: float
+        psnr:
+          type: number
+          format: float
+        lpips:
+          type: number
+          format: float
+        perceptualScore:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 100.0
+
+    SavingsReport:
+      type: object
+      properties:
+        baselineCost:
+          type: number
+          format: float
+        optimizedCost:
+          type: number
+          format: float
+        savingsAmount:
+          type: number
+          format: float
+        savingsPercentage:
+          type: number
+          format: float
+        processingTime:
+          type: integer
+          description: Total processing time in seconds
+
+    NodeInfo:
+      type: object
+      properties:
+        nodeId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [active, idle, offline]
+        capabilities:
+          type: object
+          properties:
+            hasGpu:
+              type: boolean
+            gpuModel:
+              type: string
+            vram:
+              type: integer
+              description: VRAM in MB
+            computeCapability:
+              type: string
+        reliability:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+        performance:
+          type: object
+          properties:
+            avgProcessingTime:
+              type: integer
+            successRate:
+              type: number
+              format: float
+
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+
+  parameters:
+    JobId:
+      name: jobId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Unique job identifier
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    
+    RateLimited:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  securitySchemes:
+    ApiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+    
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+security:
+  - ApiKey: []
+  - BearerAuth: []

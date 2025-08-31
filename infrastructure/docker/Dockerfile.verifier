@@ -1,0 +1,46 @@
+# Trust Engine Verifier Service Container
+# GPU-enabled for perceptual metrics computation
+
+FROM worldshare/gpu-base:latest AS base
+
+WORKDIR /app
+
+# Copy Python requirements
+COPY services/verifier/requirements.txt ./
+RUN pip3 install --no-cache-dir -r requirements.txt
+
+# Copy verification service code
+COPY services/verifier/ ./
+COPY pkg/verification/ ./pkg/verification/
+
+# Install additional verification-specific dependencies
+RUN pip3 install \
+    fastapi==0.103.0 \
+    uvicorn==0.23.2 \
+    pydantic==2.3.0 \
+    redis==4.6.0 \
+    prometheus-client==0.17.1 \
+    asyncio==3.4.3 \
+    aiohttp==3.8.5
+
+# Create non-root user (with GPU access group)
+RUN groupadd -r -g 1000 worldshare && \
+    useradd -r -u 1000 -g worldshare -G video worldshare && \
+    chown -R worldshare:worldshare /app
+
+USER worldshare
+
+# Expose ports
+EXPOSE 8081 9091
+
+# Environment for GPU operation
+ENV CUDA_VISIBLE_DEVICES=0
+ENV PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+
+# Health check with GPU validation
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD python3 -c "import torch; assert torch.cuda.is_available()" && \
+        curl -f http://localhost:8081/health || exit 1
+
+# Start with virtual display for headless GPU operation
+CMD ["python3", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8081"]

@@ -1,0 +1,168 @@
+# Trust Engine Verifier Service
+# GPU-enabled for perceptual metric computation
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trust-engine-verifier
+  namespace: worldshare-economy-offline
+  labels:
+    app: worldshare
+    component: trust-engine
+    service: verifier
+spec:
+  replicas: 1  # Limited to 1 GPU instance for M0
+  selector:
+    matchLabels:
+      app: worldshare
+      component: trust-engine
+      service: verifier
+  template:
+    metadata:
+      labels:
+        app: worldshare
+        component: trust-engine
+        service: verifier
+    spec:
+      nodeSelector:
+        accelerator: nvidia-gpu  # Ensure GPU node placement
+      containers:
+      - name: verifier
+        image: worldshare/trust-engine-verifier:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8081
+          name: http
+        - containerPort: 9091
+          name: metrics
+        env:
+        - name: SERVICE_NAME
+          value: "trust-engine-verifier"
+        - name: LOG_LEVEL
+          value: "debug"
+        - name: VERIFICATION_MODE
+          value: "statistical"
+        - name: SSIM_THRESHOLD
+          value: "0.98"
+        - name: PSNR_THRESHOLD
+          value: "35.0"
+        - name: LPIPS_ENABLED
+          value: "true"
+        - name: CUDA_VISIBLE_DEVICES
+          value: "0"
+        - name: PYTORCH_CUDA_ALLOC_CONF
+          value: "max_split_size_mb:512"
+        resources:
+          requests:
+            memory: "4Gi"
+            cpu: "2000m"
+            nvidia.com/gpu: 1  # GPU allocation for metric computation
+          limits:
+            memory: "8Gi"
+            cpu: "4000m"
+            nvidia.com/gpu: 1
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8081
+          initialDelaySeconds: 60  # Longer startup for GPU init
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - "nvidia-smi && curl -f http://localhost:8081/ready"
+          initialDelaySeconds: 30
+          periodSeconds: 5
+        volumeMounts:
+        - name: config
+          mountPath: /etc/worldshare
+          readOnly: true
+        - name: dshm
+          mountPath: /dev/shm  # Shared memory for PyTorch
+        securityContext:
+          privileged: false
+          capabilities:
+            add:
+            - SYS_ADMIN  # Required for GPU access
+      volumes:
+      - name: config
+        configMap:
+          name: verifier-config
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: trust-engine-verifier
+  namespace: worldshare-economy-offline
+  labels:
+    app: worldshare
+    component: trust-engine
+    service: verifier
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8081
+    targetPort: 8081
+    protocol: TCP
+    name: http
+  - port: 9091
+    targetPort: 9091
+    protocol: TCP
+    name: metrics
+  selector:
+    app: worldshare
+    component: trust-engine
+    service: verifier
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: verifier-config
+  namespace: worldshare-economy-offline
+data:
+  verifier.yaml: |
+    service:
+      name: trust-engine-verifier
+      version: "0.1.0-m0"
+    
+    verification:
+      mode: statistical
+      consensusThreshold: 0.66  # 2/3 agreement required
+      
+      metrics:
+        - name: SSIM
+          threshold: 0.98
+          weight: 0.35
+          gpu_accelerated: true
+        - name: PSNR
+          threshold: 35.0
+          weight: 0.30
+          gpu_accelerated: true
+        - name: LPIPS
+          threshold: 0.05
+          weight: 0.35
+          model: "alex"
+          gpu_accelerated: true
+      
+      sampling:
+        strategy: "stratified"
+        sampleRate: 0.15  # Sample 15% of work units
+        canaryValidation: true
+        canaryRate: 0.10
+    
+    gpu:
+      device: 0
+      memoryPool: 6144  # 6GB allocation
+      computeMode: "exclusive"
+      
+    cache:
+      type: "redis"
+      host: "redis-service.worldshare-economy-offline.svc.cluster.local"
+      port: 6379
+      ttl: 3600
