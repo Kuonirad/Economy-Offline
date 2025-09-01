@@ -3,16 +3,16 @@
 # Core frameworks
 fastapi==0.103.0
 uvicorn[standard]==0.23.2
-pydantic==2.3.0
+pydantic==2.4.0
 
 # GPU/ML dependencies
-torch==2.0.1
+torch==2.8.0
 torchvision==0.15.2
 numpy==1.24.3
 scipy==1.10.1
 scikit-image==0.21.0
-opencv-python-headless==4.8.0.74
-Pillow==10.0.0
+opencv-python-headless==4.8.1.78
+Pillow==10.3.0
 
 # Perceptual metrics
 lpips==0.1.4
@@ -28,7 +28,7 @@ prometheus-client==0.17.1
 python-json-logger==2.0.7
 
 # Async utilities
-aiohttp==3.8.5
+aiohttp==3.12.14
 asyncio==3.4.3
 aiofiles==23.2.1
 
