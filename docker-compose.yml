@@ -1,0 +1,158 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: worldshare-postgres
+    environment:
+      POSTGRES_USER: worldshare
+      POSTGRES_PASSWORD: worldshare
+      POSTGRES_DB: worldshare_scheduler
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - worldshare-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U worldshare"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: worldshare-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - worldshare-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MinIO Object Storage
+  minio:
+    image: minio/minio:latest
+    container_name: worldshare-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - worldshare-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # Economy Scheduler Service
+  scheduler:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.scheduler
+    container_name: worldshare-scheduler
+    environment:
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_USER: worldshare
+      DATABASE_PASSWORD: worldshare
+      DATABASE_NAME: worldshare_scheduler
+      REDIS_URL: redis://redis:6379
+      LOG_LEVEL: debug
+    ports:
+      - "8080:8080"
+      - "9090:9090"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - worldshare-network
+    restart: unless-stopped
+
+  # Trust Engine Verifier Service (GPU-enabled)
+  verifier:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.verifier
+    container_name: worldshare-verifier
+    runtime: nvidia  # Requires nvidia-docker runtime
+    environment:
+      REDIS_URL: redis://redis:6379
+      LOG_LEVEL: debug
+      CUDA_VISIBLE_DEVICES: 0
+      PYTORCH_CUDA_ALLOC_CONF: max_split_size_mb:512
+    ports:
+      - "8081:8081"
+      - "9091:9091"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - worldshare-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # Prometheus for monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: worldshare-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    ports:
+      - "9092:9090"
+    volumes:
+      - ./configs/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - worldshare-network
+    restart: unless-stopped
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: worldshare-grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_INSTALL_PLUGINS: grafana-piechart-panel
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./configs/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./configs/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    networks:
+      - worldshare-network
+    restart: unless-stopped
+
+networks:
+  worldshare-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  prometheus_data:
+  grafana_data:

@@ -4,6 +4,8 @@ import (
     "context"
     "database/sql"
     "fmt"
+    "os"
+    "strconv"
     "time"
     
     _ "github.com/lib/pq"
@@ -34,13 +36,13 @@ type Config struct {
 func NewConnection(connectionString string) (*DB, error) {
     // Parse connection string or use default config
     config := Config{
-        Host:     "localhost",
-        Port:     5432,
-        User:     "worldshare",
-        Password: "worldshare",
-        Database: "worldshare_scheduler",
-        SSLMode:  "disable", // For development
-        MaxConns: 50,
+        Host:     getEnv("DATABASE_HOST", "localhost"),
+        Port:     getEnvAsInt("DATABASE_PORT", 5432),
+        User:     getEnv("DATABASE_USER", "worldshare"),
+        Password: getEnv("DATABASE_PASSWORD", "worldshare"),
+        Database: getEnv("DATABASE_NAME", "worldshare_scheduler"),
+        SSLMode:  getEnv("DATABASE_SSL_MODE", "disable"), // For development
+        MaxConns: getEnvAsInt("DATABASE_MAX_CONNS", 50),
         Timeout:  10 * time.Second,
     }
     
@@ -157,6 +159,26 @@ func (db *DB) initSchema() error {
 
 // Close closes the database connection
 func (db *DB) Close() error {
+    if db == nil || db.DB == nil {
+        return nil
+    }
     log.Info("Closing database connection")
     return db.DB.Close()
+}
+
+// Helper functions
+func getEnv(key, defaultValue string) string {
+    if value := os.Getenv(key); value != "" {
+        return value
+    }
+    return defaultValue
+}
+
+func getEnvAsInt(key string, defaultValue int) int {
+    if value := os.Getenv(key); value != "" {
+        if intVal, err := strconv.Atoi(value); err == nil {
+            return intVal
+        }
+    }
+    return defaultValue
 }
