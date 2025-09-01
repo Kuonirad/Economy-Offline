@@ -11,7 +11,8 @@ import torch.nn.functional as F
 import numpy as np
 from skimage.metrics import structural_similarity
 import kornia
-import lpips
+
+# LPIPS import handled conditionally in __init__
 
 logger = logging.getLogger(__name__)
 
@@ -23,9 +24,13 @@ class MetricsCalculator:
         
         # Initialize LPIPS model for perceptual distance
         try:
+            import lpips
             self.lpips_model = lpips.LPIPS(net='alex').to(device)
             self.lpips_model.eval()
             logger.info("LPIPS model loaded successfully")
+        except ImportError:
+            logger.warning("LPIPS not installed, perceptual distance metrics will be unavailable")
+            self.lpips_model = None
         except Exception as e:
             logger.warning(f"Failed to load LPIPS model: {e}")
             self.lpips_model = None

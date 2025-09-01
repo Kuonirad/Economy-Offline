@@ -1,0 +1,22 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'economy-scheduler'
+    static_configs:
+      - targets: ['scheduler:9090']
+        labels:
+          service: 'scheduler'
+          component: 'optimizer'
+
+  - job_name: 'trust-engine-verifier'
+    static_configs:
+      - targets: ['verifier:9091']
+        labels:
+          service: 'verifier'
+          component: 'trust-engine'
+
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']

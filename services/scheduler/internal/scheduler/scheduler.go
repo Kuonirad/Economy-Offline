@@ -71,8 +71,11 @@ type Job struct {
     Shards           []sharding.Shard
     DistributionPlan []DispatchInstruction
     TotalShards      int
+    CompletedShards  int
+    FailedShards     int
     CreatedAt        time.Time
     UpdatedAt        time.Time
+    CompletedAt      *time.Time
 }
 
 // DispatchInstruction defines work assignment
@@ -126,6 +129,7 @@ func (s *SchedulerService) ScheduleJob(ctx context.Context, manifest *JobManifes
         return "", fmt.Errorf("failed to generate shards: %w", err)
     }
     job.Shards = shards
+    job.TotalShards = len(shards)
     
     log.WithFields(logrus.Fields{
         "jobId":      jobID,
@@ -327,6 +331,11 @@ func (s *SchedulerService) checkJobProgress() {
     // M1 will implement actual progress tracking
 }
 
+// GetNodeManager returns the node manager instance
+func (s *SchedulerService) GetNodeManager() *NodeManager {
+    return s.nodeManager
+}
+
 // GetJobStatus returns the current status of a job
 func (s *SchedulerService) GetJobStatus(jobID string) (*Job, error) {
     s.mu.RLock()
@@ -338,4 +347,72 @@ func (s *SchedulerService) GetJobStatus(jobID string) (*Job, error) {
     }
     
     return job, nil
+}
+
+// CancelJob cancels an active job
+func (s *SchedulerService) CancelJob(jobID string) error {
+    s.mu.Lock()
+    defer s.mu.Unlock()
+    
+    job, exists := s.activeJobs[jobID]
+    if !exists {
+        return fmt.Errorf("job not found: %s", jobID)
+    }
+    
+    // Check if job can be cancelled
+    if job.Status == "completed" || job.Status == "cancelled" {
+        return fmt.Errorf("job %s is already %s", jobID, job.Status)
+    }
+    
+    // Update job status
+    job.Status = "cancelled"
+    job.UpdatedAt = time.Now()
+    now := time.Now()
+    job.CompletedAt = &now
+    
+    // Remove job items from queue
+    removedCount := s.jobQueue.RemoveJob(jobID)
+    
+    log.WithFields(logrus.Fields{
+        "jobId": jobID,
+        "removedItems": removedCount,
+    }).Info("Job cancelled")
+    
+    return nil
+}
+
+// UpdateShardStatus updates the status of a shard
+func (s *SchedulerService) UpdateShardStatus(jobID, shardID, status string, success bool) {
+    s.mu.Lock()
+    defer s.mu.Unlock()
+    
+    job, exists := s.activeJobs[jobID]
+    if !exists {
+        return
+    }
+    
+    // Update shard counters
+    if status == "completed" {
+        if success {
+            job.CompletedShards++
+        } else {
+            job.FailedShards++
+        }
+        
+        // Check if job is complete
+        if job.CompletedShards + job.FailedShards >= job.TotalShards {
+            job.Status = "completed"
+            now := time.Now()
+            job.CompletedAt = &now
+            
+            log.WithFields(logrus.Fields{
+                "jobId": jobID,
+                "completed": job.CompletedShards,
+                "failed": job.FailedShards,
+                "total": job.TotalShards,
+            }).Info("Job completed")
+        }
+    }
+    
+    job.UpdatedAt = time.Now()
 }

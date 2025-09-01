@@ -166,6 +166,13 @@ async def verify_work(
     if verification_engine is None:
         raise HTTPException(status_code=503, detail="Verification engine not available")
     
+    # Validate request
+    if not request.job_id or not request.shard_id:
+        raise HTTPException(status_code=400, detail="Job ID and Shard ID are required")
+    
+    if not request.result_data:
+        raise HTTPException(status_code=400, detail="Result data is required")
+    
     verification_id = f"{request.job_id}-{request.shard_id}-{request.redundancy_id}"
     
     try:
