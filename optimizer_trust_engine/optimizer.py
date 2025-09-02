@@ -18,7 +18,21 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Optional, Tuple, Any
 from pathlib import Path
-import numpy as np
+
+# Handle numpy import gracefully
+try:
+    import numpy as np
+except ImportError:
+    # Fallback implementation for numpy functions
+    class np:
+        @staticmethod
+        def mean(values):
+            if isinstance(values, list):
+                return sum(values) / len(values) if values else 0
+            elif hasattr(values, 'values'):
+                vals = list(values.values())
+                return sum(vals) / len(vals) if vals else 0
+            return 0
 
 logger = logging.getLogger(__name__)
 
@@ -542,16 +556,37 @@ class OptimizerCore:
         Main optimization entry point
         Processes scene through complete optimization pipeline
         """
-        logger.info(f"Starting optimization for scene {request.scene_metadata.scene_id}")
-        
-        # Route through optimization pipeline
-        result = await self.router.route_optimization(request)
-        
-        # Update metrics
-        self._update_metrics(result)
-        
-        logger.info(f"Optimization complete for scene {request.scene_metadata.scene_id}")
-        return result
+        try:
+            logger.info(f"Starting optimization for scene {request.scene_metadata.scene_id}")
+            
+            # Validate request
+            if not request or not request.scene_metadata:
+                raise ValueError("Invalid optimization request")
+            
+            # Route through optimization pipeline
+            result = await self.router.route_optimization(request)
+            
+            # Update metrics
+            self._update_metrics(result)
+            
+            logger.info(f"Optimization complete for scene {request.scene_metadata.scene_id}")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Optimization failed for scene {request.scene_metadata.scene_id}: {str(e)}")
+            # Return failure result
+            return OptimizationResult(
+                request_id="error",
+                scene_id=request.scene_metadata.scene_id,
+                success=False,
+                optimization_path="unknown",
+                processing_time=0.0,
+                estimated_cost=0.0,
+                quality_metrics={},
+                file_size_reduction=0.0,
+                performance_gain=0.0,
+                error_message=str(e)
+            )
     
     def _update_metrics(self, result: OptimizationResult):
         """Update internal metrics based on result"""

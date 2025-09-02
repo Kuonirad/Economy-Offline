@@ -10,18 +10,27 @@ through optimization, verification, and cost analysis.
 import asyncio
 import json
 import sys
+import os
 from datetime import datetime
 from typing import Dict
 
-from optimizer import (
-    OptimizerCore,
-    SceneMetadata,
-    SceneComplexity,
-    OptimizationProfile,
-    OptimizationRequest
-)
-from trust_engine import TrustEngine
-from economy_offline import EconomyOfflineBeach
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+try:
+    from optimizer import (
+        OptimizerCore,
+        SceneMetadata,
+        SceneComplexity,
+        OptimizationProfile,
+        OptimizationRequest
+    )
+    from trust_engine import TrustEngine
+    from economy_offline import EconomyOfflineBeach
+except ImportError as e:
+    print(f"Import error: {e}")
+    print("Please ensure all module files are in the same directory")
+    sys.exit(1)
 
 
 class InteractiveDemo:
