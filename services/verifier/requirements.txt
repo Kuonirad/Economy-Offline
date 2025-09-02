@@ -1,43 +1,43 @@
 # Trust Engine Verifier Service Dependencies
 
 # Core frameworks
-fastapi==0.103.0
-uvicorn[standard]==0.23.2
-pydantic==2.4.0
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+pydantic==2.10.3
 
 # GPU/ML dependencies
-torch==2.8.0
-torchvision==0.15.2
-numpy==1.24.3
-scipy==1.10.1
-scikit-image==0.21.0
-opencv-python-headless==4.8.1.78
-Pillow==10.3.0
+torch==2.5.1
+torchvision==0.20.1
+numpy==1.26.4
+scipy==1.14.1
+scikit-image==0.24.0
+opencv-python-headless==4.10.0.84
+Pillow==11.0.0
 
 # Perceptual metrics
 lpips==0.1.4
-kornia==0.7.0
+kornia==0.7.4
 
 # Database and caching
-redis==4.6.0
-asyncpg==0.28.0
-sqlalchemy==2.0.20
+redis==5.2.1
+asyncpg==0.30.0
+sqlalchemy==2.0.36
 
 # Monitoring and logging
-prometheus-client==0.17.1
-python-json-logger==2.0.7
+prometheus-client==0.21.1
+python-json-logger==3.2.0
 
 # Async utilities
-aiohttp==3.12.14
-asyncio==3.4.3
-aiofiles==23.2.1
+aiohttp==3.11.10
+# asyncio is built-in, removing explicit version
+aiofiles==24.1.0
 
 # Configuration
-python-dotenv==1.0.0
-pyyaml==6.0.1
+python-dotenv==1.0.1
+pyyaml==6.0.2
 
 # Testing (dev dependencies)
-pytest==7.4.0
-pytest-asyncio==0.21.1
-pytest-cov==4.1.0
-httpx==0.24.1
+pytest==8.3.4
+pytest-asyncio==0.25.0
+pytest-cov==6.0.0
+httpx==0.28.1

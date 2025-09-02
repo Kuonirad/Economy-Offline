@@ -93,3 +93,36 @@ obj/
 tmp/
 temp/
 *.tmp
+# === Security Additions ===
+
+# Security - Never commit these
+.env
+.env.local
+.env.production
+*.key
+*.pem
+*.crt
+*.p12
+*.pfx
+secrets/
+credentials/
+private/
+
+# Audit logs
+security_audit.log
+audit_*.log
+*.audit
+
+# Backup files that might contain sensitive data
+*.bak
+*.backup
+*.old
+*.orig
+
+# IDE and system files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
