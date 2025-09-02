@@ -127,8 +127,8 @@ class ProbabilisticVerifier:
         # Cochran's formula: n = (z^2 * p * (1-p)) / e^2
         n = (z ** 2 * p * (1 - p)) / (e ** 2)
         
-        # Adjust for complexity
-        n = n * (1 + complexity * 0.5)
+        # Adjust for complexity (higher complexity = more samples)
+        n = n * (1 + complexity * 1.5)  # Increased multiplier for better differentiation
         
         # Apply bounds
         return int(clamp(n, self.min_samples, self.max_samples))

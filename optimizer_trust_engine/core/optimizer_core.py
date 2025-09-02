@@ -507,7 +507,7 @@ class OptimizerCore:
     
     def _update_metrics(self, result: OptimizationResult, processing_time: float) -> None:
         """Update internal metrics thread-safely"""
-        with self.metrics_lock:
+        # Update metrics directly (ThreadSafeCounter handles locking internally)
             self.metrics["total_scenes_processed"] += 1
             
             if result.success:
