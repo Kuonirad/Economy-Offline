@@ -1,0 +1,50 @@
+# Core dependencies for Optimizer and Trust Engine Framework
+
+# Numerical and scientific computing
+numpy>=1.21.0
+scipy>=1.7.0
+
+# Async support
+asyncio-mqtt>=0.12.0
+aiofiles>=0.8.0
+
+# Logging and monitoring
+python-json-logger>=2.0.0
+colorlog>=6.6.0
+
+# Data handling
+pydantic>=1.9.0
+python-dateutil>=2.8.0
+
+# Testing
+pytest>=7.0.0
+pytest-asyncio>=0.18.0
+pytest-cov>=3.0.0
+
+# Performance monitoring
+psutil>=5.9.0
+py-cpuinfo>=8.0.0
+
+# Visualization (optional, for metrics)
+matplotlib>=3.5.0
+plotly>=5.6.0
+
+# Machine learning (for scene analysis)
+scikit-learn>=1.0.0
+joblib>=1.1.0
+
+# Hashing and security
+cryptography>=36.0.0
+pynacl>=1.5.0
+
+# Time and scheduling
+pytz>=2021.3
+croniter>=1.3.0
+
+# Configuration
+python-dotenv>=0.19.0
+pyyaml>=6.0
+
+# Network communication (for distributed nodes)
+aiohttp>=3.8.0
+websockets>=10.0
